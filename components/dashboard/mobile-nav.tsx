@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -21,11 +22,12 @@ import {
   Clock,
   UserCog,
   Menu,
-  Zap,
+  RefreshCw,
+  Gift,
 } from "lucide-react"
 import { useKeyAuth } from "@/lib/keyauth-context"
 
-const navigation = [
+const ownerNavigation = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { name: "Licenses", href: "/dashboard/licenses", icon: Key },
   { name: "Users", href: "/dashboard/users", icon: Users },
@@ -40,54 +42,59 @@ const navigation = [
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ]
 
+const userNavigation = [
+  { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Redeem Key", href: "/dashboard/redeem-key", icon: Gift },
+  { name: "Downloads", href: "/dashboard/downloads", icon: Download },
+  { name: "Rebrand", href: "/dashboard/rebrand", icon: RefreshCw },
+]
+
 export function MobileNav() {
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
-  const { appDetails, isConfigured } = useKeyAuth()
+  const { appDetails, isOwner, role } = useKeyAuth()
+
+  const navigation = isOwner ? ownerNavigation : userNavigation
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="lg:hidden"
-        >
+        <Button variant="ghost" size="icon" className="lg:hidden">
           <Menu className="h-5 w-5" />
           <span className="sr-only">Toggle menu</span>
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-64 p-0 bg-sidebar border-border">
+      <SheetContent side="left" className="w-64 p-0 bg-sidebar border-border flex flex-col">
         <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
-        
+
         {/* Logo */}
-        <div className="flex h-16 items-center gap-3 px-5 border-b border-border">
-          <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10">
-            <Zap className="w-5 h-5 text-primary" />
-          </div>
-          <div className="flex flex-col min-w-0">
-            <span className="font-semibold text-foreground tracking-tight truncate">
-              {isConfigured && appDetails?.name ? appDetails.name : "KeyAuth"}
-            </span>
-            <span className="text-xs text-muted-foreground">Seller Dashboard</span>
-          </div>
+        <div className="flex h-20 items-center justify-center border-b border-border px-4 shrink-0">
+          <Image
+            src="/flake-logo.png"
+            alt="Flake Services"
+            width={160}
+            height={60}
+            className="object-contain h-14 w-auto"
+            priority
+          />
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 space-y-0.5 px-3 py-4 overflow-y-auto max-h-[calc(100vh-8rem)]">
+        <nav className="flex-1 space-y-0.5 px-3 py-4 overflow-y-auto">
           {navigation.map((item) => {
-            const isActive = pathname === item.href ||
+            const isActive =
+              pathname === item.href ||
               (item.href !== "/dashboard" && pathname.startsWith(item.href))
-            
+
             return (
               <Link
                 key={item.name}
                 href={item.href}
                 onClick={() => setOpen(false)}
                 className={cn(
-                  "relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150",
+                  "relative flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all duration-150",
                   isActive
-                    ? "bg-primary/10 text-primary"
+                    ? "bg-primary/15 text-primary"
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
               >
@@ -101,12 +108,29 @@ export function MobileNav() {
           })}
         </nav>
 
-        {/* Logout */}
-        <div className="absolute bottom-0 left-0 right-0 border-t border-border p-3 bg-sidebar">
+        {/* Bottom */}
+        <div className="border-t border-border p-3 space-y-1 shrink-0">
+          {role && (
+            <div className="flex items-center gap-3 px-3 py-2 mb-1">
+              <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/20 shrink-0">
+                <span className="text-xs font-bold text-primary uppercase">
+                  {isOwner ? "O" : "U"}
+                </span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-foreground truncate">
+                  {isOwner ? (appDetails?.name || "Owner") : "User Account"}
+                </p>
+                <p className="text-[11px] text-muted-foreground truncate">
+                  {isOwner ? "Seller / Owner" : "Member"}
+                </p>
+              </div>
+            </div>
+          )}
           <Link
             href="/logout"
             onClick={() => setOpen(false)}
-            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <LogOut className="h-[18px] w-[18px]" />
             Logout

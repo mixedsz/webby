@@ -62,22 +62,7 @@ interface LicenseKey {
   note: string | null
 }
 
-const existingKeys: LicenseKey[] = [
-  {
-    id: "1",
-    key: "Reliant-qY4QN-5gkeFo",
-    product: "Boost Bot",
-    expiresAt: "2053-03-04 10:07:20",
-    note: null,
-  },
-  {
-    id: "2",
-    key: "Reliant-xK9mP-H8jkLs",
-    product: "SellAuth AIO",
-    expiresAt: "2053-06-15 14:22:10",
-    note: "VIP Customer",
-  },
-]
+const existingKeys: LicenseKey[] = []
 
 const benefits = [
   { icon: Sparkles, text: "Custom branding for your business" },
@@ -279,7 +264,7 @@ export default function RebrandPage() {
                   If you encounter any errors or need assistance with your rebrands, our support team is available 24/7 to help you.
                 </p>
                 <Link
-                  href="https://discord.gg/keyauth"
+                  href="https://discord.gg/flakeservices"
                   target="_blank"
                   className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
                 >

@@ -20,7 +20,7 @@ export default function DashboardLayout({
           {/* Mobile Header */}
           <header className="lg:hidden sticky top-0 z-30 flex h-14 items-center gap-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
             <MobileNav />
-            <span className="font-semibold">KeyAuth</span>
+            <span className="font-semibold tracking-wide text-foreground">Flake Services</span>
           </header>
           
           {children}

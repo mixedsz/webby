@@ -1,7 +1,7 @@
-// KeyAuth Seller API Client
+// KeyAuth Seller API Client (proxied through /api/keyauth to avoid CORS/403/423)
 // Documentation: https://keyauthdocs.apidog.io/
 
-const KEYAUTH_API_BASE = "https://keyauth.win/api/seller/";
+const KEYAUTH_API_BASE = "/api/keyauth";
 
 export interface KeyAuthResponse<T = unknown> {
   success: boolean;
@@ -99,24 +99,25 @@ export interface Log {
   pcuser: string;
 }
 
-// Helper function to make API calls
+// Helper function to make API calls through the server-side proxy
 async function keyauthRequest<T>(
   sellerKey: string,
   type: string,
   params: Record<string, string | number | boolean> = {}
 ): Promise<KeyAuthResponse<T>> {
-  const url = new URL(KEYAUTH_API_BASE);
-  url.searchParams.set("sellerkey", sellerKey);
-  url.searchParams.set("type", type);
+  const searchParams = new URLSearchParams();
+  searchParams.set("sellerkey", sellerKey);
+  searchParams.set("type", type);
 
   Object.entries(params).forEach(([key, value]) => {
-    url.searchParams.set(key, String(value));
+    searchParams.set(key, String(value));
   });
 
-  const response = await fetch(url.toString());
+  const response = await fetch(`${KEYAUTH_API_BASE}?${searchParams.toString()}`);
 
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body?.message || `HTTP error! status: ${response.status}`);
   }
 
   return response.json();

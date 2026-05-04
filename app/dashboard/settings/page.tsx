@@ -20,8 +20,8 @@ import {
 export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [username, setUsername] = useState("Reliant")
-  const [email, setEmail] = useState("reliant@example.com")
+  const [username, setUsername] = useState("")
+  const [email, setEmail] = useState("")
   const [notifications, setNotifications] = useState(true)
   const [twoFactor, setTwoFactor] = useState(false)
 

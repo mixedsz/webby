@@ -27,32 +27,8 @@ interface Product {
   downloadUrl: string
 }
 
-const userProducts: Product[] = [
-  {
-    id: "1",
-    name: "KeyAuth Bot",
-    licenseKey: "hdboosts-fedj-pNHd",
-    expiresAt: "Aug 3, 2298",
-    daysRemaining: 99437,
-    downloadUrl: "#",
-  },
-  {
-    id: "2",
-    name: "SellAuth AIO",
-    licenseKey: "hdboosts-xmsc-06K9",
-    expiresAt: "Aug 2, 2299",
-    daysRemaining: 99802,
-    downloadUrl: "#",
-  },
-  {
-    id: "3",
-    name: "Discord Booster",
-    licenseKey: "boost-3kfj-Wm9x",
-    expiresAt: "Dec 15, 2026",
-    daysRemaining: 590,
-    downloadUrl: "#",
-  },
-]
+// Products populated from user's active licenses — shown when user has redeemed keys
+const userProducts: Product[] = []
 
 function ProductCard({ product }: { product: Product }) {
   const [isResetting, setIsResetting] = useState(false)
@@ -201,7 +177,7 @@ export default function DownloadsPage() {
                   {"If you're having trouble installing or running our software, please check our installation guide or contact our support team via Discord for assistance."}
                 </p>
                 <Link
-                  href="https://discord.gg/keyauth"
+                  href="https://discord.gg/flakeservices"
                   target="_blank"
                   className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
                 >

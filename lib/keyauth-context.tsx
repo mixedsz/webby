@@ -3,37 +3,111 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { getAppDetails, getStats, type AppDetails, type AppStats } from "./keyauth-api";
 
-interface KeyAuthContextType {
+type UserRole = "owner" | "user" | null;
+
+interface FlakeContextType {
   sellerKey: string;
   setSellerKey: (key: string) => void;
-  isConfigured: boolean;
+  isOwner: boolean;
+  role: UserRole;
+  setRole: (role: UserRole) => void;
   appDetails: AppDetails | null;
   stats: AppStats | null;
   isLoading: boolean;
+  isVerifying: boolean;
   error: string | null;
   refreshData: () => Promise<void>;
+  clearOwnerKey: () => void;
+  // Legacy alias
+  isConfigured: boolean;
 }
 
-const KeyAuthContext = createContext<KeyAuthContextType | undefined>(undefined);
+const FlakeContext = createContext<FlakeContextType | undefined>(undefined);
 
 export function KeyAuthProvider({ children }: { children: React.ReactNode }) {
   const [sellerKey, setSellerKeyState] = useState<string>("");
+  const [role, setRoleState] = useState<UserRole>(null);
   const [appDetails, setAppDetails] = useState<AppDetails | null>(null);
   const [stats, setStats] = useState<AppStats | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isConfigured = sellerKey.length === 32;
+  const isOwner = role === "owner";
+  // isConfigured is true when we have a valid seller key (owner) OR a user has selected a role
+  const isConfigured = isOwner;
 
-  const setSellerKey = useCallback((key: string) => {
-    setSellerKeyState(key);
+  const setRole = useCallback((r: UserRole) => {
+    setRoleState(r);
     if (typeof window !== "undefined") {
-      localStorage.setItem("keyauth_seller_key", key);
+      if (r) {
+        localStorage.setItem("flake_role", r);
+      } else {
+        localStorage.removeItem("flake_role");
+      }
+    }
+  }, []);
+
+  const setSellerKey = useCallback(async (key: string) => {
+    if (!key || key.trim().length < 10) {
+      setError("Please enter a valid seller key.");
+      return;
+    }
+
+    setIsVerifying(true);
+    setError(null);
+
+    try {
+      // Verify the key by hitting the API through our proxy
+      const tempKey = key.trim();
+      const searchParams = new URLSearchParams({ sellerkey: tempKey, type: "appdetails" });
+      const res = await fetch(`/api/keyauth?${searchParams.toString()}`);
+      const data = await res.json();
+
+      if (data.success && data.appdetails) {
+        setSellerKeyState(tempKey);
+        setAppDetails(data.appdetails as AppDetails);
+        setRoleState("owner");
+        if (typeof window !== "undefined") {
+          localStorage.setItem("flake_seller_key", tempKey);
+          localStorage.setItem("flake_role", "owner");
+        }
+        // Also fetch stats
+        const statsParams = new URLSearchParams({ sellerkey: tempKey, type: "stats" });
+        const statsRes = await fetch(`/api/keyauth?${statsParams.toString()}`);
+        const statsData = await statsRes.json();
+        if (statsData.success) {
+          setStats({
+            totusers: statsData.totusers ?? "0",
+            totalkeys: statsData.totalkeys ?? "0",
+            onlineusers: statsData.onlineusers ?? "0",
+            totalfiles: statsData.totalfiles ?? "0",
+          });
+        }
+      } else {
+        setError(data.message || "Invalid seller key. Please check and try again.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to verify seller key.");
+    } finally {
+      setIsVerifying(false);
+    }
+  }, []);
+
+  const clearOwnerKey = useCallback(() => {
+    setSellerKeyState("");
+    setRoleState(null);
+    setAppDetails(null);
+    setStats(null);
+    setError(null);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("flake_seller_key");
+      localStorage.removeItem("flake_role");
     }
   }, []);
 
   const refreshData = useCallback(async () => {
-    if (!isConfigured) return;
+    if (!sellerKey || !isOwner) return;
 
     setIsLoading(true);
     setError(null);
@@ -51,11 +125,12 @@ export function KeyAuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (statsRes.success) {
+        const s = statsRes as Record<string, unknown>;
         setStats({
-          totusers: (statsRes as Record<string, unknown>).totusers as string || "0",
-          totalkeys: (statsRes as Record<string, unknown>).totalkeys as string || "0",
-          onlineusers: (statsRes as Record<string, unknown>).onlineusers as string || "0",
-          totalfiles: (statsRes as Record<string, unknown>).totalfiles as string || "0",
+          totusers: (s.totusers as string) || "0",
+          totalkeys: (s.totalkeys as string) || "0",
+          onlineusers: (s.onlineusers as string) || "0",
+          totalfiles: (s.totalfiles as string) || "0",
         });
       }
     } catch (err) {
@@ -63,45 +138,54 @@ export function KeyAuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [sellerKey, isConfigured]);
+  }, [sellerKey, isOwner]);
 
-  // Load seller key from localStorage on mount
+  // Restore session on mount
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const savedKey = localStorage.getItem("keyauth_seller_key");
-      if (savedKey) {
-        setSellerKeyState(savedKey);
-      }
+    if (typeof window === "undefined") return;
+    const savedKey = localStorage.getItem("flake_seller_key");
+    const savedRole = localStorage.getItem("flake_role") as UserRole;
+
+    if (savedKey && savedRole === "owner") {
+      setSellerKeyState(savedKey);
+      setRoleState("owner");
+    } else if (savedRole === "user") {
+      setRoleState("user");
     }
   }, []);
 
-  // Fetch data when seller key changes
+  // Fetch data when seller key is restored from localStorage (not via setSellerKey)
   useEffect(() => {
-    if (isConfigured) {
+    if (sellerKey && isOwner && !appDetails) {
       refreshData();
     }
-  }, [isConfigured, refreshData]);
+  }, [sellerKey, isOwner, appDetails, refreshData]);
 
   return (
-    <KeyAuthContext.Provider
+    <FlakeContext.Provider
       value={{
         sellerKey,
         setSellerKey,
-        isConfigured,
+        isOwner,
+        role,
+        setRole,
         appDetails,
         stats,
         isLoading,
+        isVerifying,
         error,
         refreshData,
+        clearOwnerKey,
+        isConfigured,
       }}
     >
       {children}
-    </KeyAuthContext.Provider>
+    </FlakeContext.Provider>
   );
 }
 
 export function useKeyAuth() {
-  const context = useContext(KeyAuthContext);
+  const context = useContext(FlakeContext);
   if (context === undefined) {
     throw new Error("useKeyAuth must be used within a KeyAuthProvider");
   }

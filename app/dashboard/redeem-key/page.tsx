@@ -182,7 +182,7 @@ export default function RedeemKeyPage() {
                     {"If you're experiencing issues with your license key, please contact our support team via Discord for assistance."}
                   </p>
                   <Link
-                    href="https://discord.gg/keyauth"
+                    href="https://discord.gg/flakeservices"
                     target="_blank"
                     className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
                   >

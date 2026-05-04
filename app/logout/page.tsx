@@ -11,16 +11,20 @@ export default function LogoutPage() {
 
   useEffect(() => {
     const logout = async () => {
-      // Simulate logout process
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-      
-      // In a real app, you would clear session/tokens here
+      // Clear Flake Services session from localStorage
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("flake_seller_key")
+        localStorage.removeItem("flake_role")
+        // Legacy key cleanup
+        localStorage.removeItem("keyauth_seller_key")
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1200))
       setIsLoggingOut(false)
-      
-      // Redirect to login or home after short delay
+
       setTimeout(() => {
         router.push("/dashboard")
-      }, 1000)
+      }, 800)
     }
 
     logout()
