@@ -11,6 +11,12 @@ export async function GET(request: NextRequest) {
     url.searchParams.set(key, value);
   });
 
+  // Forward the real client IP so KeyAuth IP whitelisting works correctly
+  const clientIp =
+    request.headers.get("x-real-ip") ||
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "";
+
   try {
     const response = await fetch(url.toString(), {
       method: "GET",
@@ -22,6 +28,10 @@ export async function GET(request: NextRequest) {
         "Accept-Language": "en-US,en;q=0.9",
         Referer: "https://keyauth.win/",
         Origin: "https://keyauth.win",
+        ...(clientIp && {
+          "X-Forwarded-For": clientIp,
+          "X-Real-IP": clientIp,
+        }),
       },
     });
 

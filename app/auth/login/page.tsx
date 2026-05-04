@@ -42,27 +42,32 @@ export default function LoginPage() {
     setError(null)
     setSuccessMsg(null)
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo:
-          process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
-          `${window.location.origin}/auth/callback`,
         data: { username },
       },
     })
 
-    setLoading(false)
-
     if (error) {
+      setLoading(false)
       setError(error.message)
-    } else {
-      setSuccessMsg("Check your email to confirm your account before signing in.")
-      setEmail("")
-      setPassword("")
-      setUsername("")
+      return
     }
+
+    // If a session is returned immediately, email confirmation is disabled — go straight to dashboard
+    if (data.session) {
+      window.location.href = "/dashboard"
+      return
+    }
+
+    // Fallback: confirmation email was sent
+    setLoading(false)
+    setSuccessMsg("Account created! Check your email to confirm before signing in.")
+    setEmail("")
+    setPassword("")
+    setUsername("")
   }
 
   return (
