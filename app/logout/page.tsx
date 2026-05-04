@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Loader2, LogOut } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
 
 export default function LogoutPage() {
   const router = useRouter()
@@ -15,15 +16,17 @@ export default function LogoutPage() {
       if (typeof window !== "undefined") {
         localStorage.removeItem("flake_seller_key")
         localStorage.removeItem("flake_role")
-        // Legacy key cleanup
         localStorage.removeItem("keyauth_seller_key")
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 1200))
+      // Sign out from Supabase
+      const supabase = createClient()
+      await supabase.auth.signOut()
+
       setIsLoggingOut(false)
 
       setTimeout(() => {
-        router.push("/dashboard")
+        router.push("/auth/login")
       }, 800)
     }
 
