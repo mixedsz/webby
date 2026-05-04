@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
@@ -15,22 +15,29 @@ import {
   ArrowRight,
   Loader2,
   CheckCircle2,
+  Trash2,
 } from "lucide-react"
 import Link from "next/link"
+import { useKeyAuth } from "@/lib/keyauth-context"
+import { getAllFiles, type AppFile } from "@/lib/keyauth-api"
+
+interface RedeemedLicense {
+  appName: string
+  licenseKey: string
+  redeemedAt: string
+  sellerKey: string
+}
 
 interface Product {
   id: string
   name: string
   licenseKey: string
-  expiresAt: string
-  daysRemaining: number
-  downloadUrl: string
+  redeemedAt: string
+  sellerKey: string
+  files: AppFile[]
 }
 
-// Products populated from user's active licenses — shown when user has redeemed keys
-const userProducts: Product[] = []
-
-function ProductCard({ product }: { product: Product }) {
+function ProductCard({ product, onRemove }: { product: Product; onRemove: () => void }) {
   const [isResetting, setIsResetting] = useState(false)
   const [resetSuccess, setResetSuccess] = useState(false)
 
@@ -48,6 +55,18 @@ function ProductCard({ product }: { product: Product }) {
     setTimeout(() => setResetSuccess(false), 3000)
   }
 
+  // Mask the license key for display
+  const maskedKey = product.licenseKey.length > 8 
+    ? `${product.licenseKey.slice(0, 4)}...${product.licenseKey.slice(-4)}`
+    : product.licenseKey
+
+  // Format the redemption date
+  const formattedDate = new Date(product.redeemedAt).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  })
+
   return (
     <Card className="border-border bg-card hover:border-primary/30 transition-colors duration-300">
       <CardContent className="p-6">
@@ -63,30 +82,49 @@ function ProductCard({ product }: { product: Product }) {
               </h3>
               <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
                 <Key className="h-4 w-4" />
-                <span className="font-mono">{product.licenseKey}</span>
+                <span className="font-mono">{maskedKey}</span>
               </div>
               <div className="flex flex-wrap items-center gap-4 text-sm">
                 <div className="flex items-center gap-1.5 text-muted-foreground">
                   <Calendar className="h-4 w-4" />
-                  <span>Expires: {product.expiresAt}</span>
+                  <span>Redeemed: {formattedDate}</span>
                 </div>
-                <div className="flex items-center gap-1.5 text-green-400">
-                  <Clock className="h-4 w-4" />
-                  <span>{product.daysRemaining.toLocaleString()} days remaining</span>
-                </div>
+                {product.files.length > 0 && (
+                  <div className="flex items-center gap-1.5 text-green-400">
+                    <Download className="h-4 w-4" />
+                    <span>{product.files.length} file(s) available</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-3">
-            <Button
-              className="bg-primary hover:bg-primary/90 text-primary-foreground font-medium gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Download
-              <ExternalLink className="h-3 w-3" />
-            </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {product.files.length > 0 ? (
+              product.files.slice(0, 2).map((file) => (
+                <Button
+                  key={file.id}
+                  asChild
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-medium gap-2"
+                >
+                  <a href={file.url} target="_blank" rel="noopener noreferrer">
+                    <Download className="h-4 w-4" />
+                    {file.name.length > 15 ? `${file.name.slice(0, 12)}...` : file.name}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </Button>
+              ))
+            ) : (
+              <Button
+                disabled
+                variant="outline"
+                className="gap-2"
+              >
+                <Download className="h-4 w-4" />
+                No files available
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={handleResetHWID}
@@ -102,6 +140,14 @@ function ProductCard({ product }: { product: Product }) {
               )}
               {resetSuccess ? "Reset!" : "Reset HWID"}
             </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onRemove}
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </CardContent>
@@ -110,6 +156,87 @@ function ProductCard({ product }: { product: Product }) {
 }
 
 export default function DownloadsPage() {
+  const { savedApps } = useKeyAuth()
+  const [products, setProducts] = useState<Product[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  // Load redeemed licenses from localStorage and fetch their files
+  useEffect(() => {
+    const loadProducts = async () => {
+      if (typeof window === "undefined") return
+      
+      setIsLoading(true)
+      
+      try {
+        const storedLicenses: RedeemedLicense[] = JSON.parse(
+          localStorage.getItem("flake_redeemed_licenses") || "[]"
+        )
+        
+        if (storedLicenses.length === 0) {
+          setProducts([])
+          setIsLoading(false)
+          return
+        }
+
+        // Fetch files for each unique seller key
+        const sellerKeyMap = new Map<string, AppFile[]>()
+        
+        for (const license of storedLicenses) {
+          if (!sellerKeyMap.has(license.sellerKey)) {
+            try {
+              const filesRes = await getAllFiles(license.sellerKey)
+              if (filesRes.success && Array.isArray(filesRes.files)) {
+                sellerKeyMap.set(license.sellerKey, filesRes.files as AppFile[])
+              } else {
+                sellerKeyMap.set(license.sellerKey, [])
+              }
+            } catch {
+              sellerKeyMap.set(license.sellerKey, [])
+            }
+          }
+        }
+
+        // Build products from licenses
+        const loadedProducts: Product[] = storedLicenses.map((license, index) => ({
+          id: `${license.licenseKey}-${index}`,
+          name: license.appName,
+          licenseKey: license.licenseKey,
+          redeemedAt: license.redeemedAt,
+          sellerKey: license.sellerKey,
+          files: sellerKeyMap.get(license.sellerKey) || [],
+        }))
+
+        setProducts(loadedProducts)
+      } catch (err) {
+        console.error("[v0] Failed to load products:", err)
+        setProducts([])
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadProducts()
+  }, [savedApps])
+
+  const handleRemoveProduct = (productId: string) => {
+    // Remove from state
+    setProducts(prev => prev.filter(p => p.id !== productId))
+    
+    // Remove from localStorage
+    if (typeof window !== "undefined") {
+      const storedLicenses: RedeemedLicense[] = JSON.parse(
+        localStorage.getItem("flake_redeemed_licenses") || "[]"
+      )
+      const productToRemove = products.find(p => p.id === productId)
+      if (productToRemove) {
+        const updated = storedLicenses.filter(
+          l => l.licenseKey !== productToRemove.licenseKey || l.appName !== productToRemove.name
+        )
+        localStorage.setItem("flake_redeemed_licenses", JSON.stringify(updated))
+      }
+    }
+  }
+
   return (
     <div className="flex flex-col min-h-screen">
       {/* Page Header */}
@@ -129,10 +256,21 @@ export default function DownloadsPage() {
 
       <div className="flex-1 p-6 space-y-6">
         {/* Products List */}
-        {userProducts.length > 0 ? (
+        {isLoading ? (
+          <Card className="border-border bg-card">
+            <CardContent className="p-12 text-center">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+              <p className="text-sm text-muted-foreground">Loading your products...</p>
+            </CardContent>
+          </Card>
+        ) : products.length > 0 ? (
           <div className="space-y-4">
-            {userProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
+            {products.map((product) => (
+              <ProductCard 
+                key={product.id} 
+                product={product} 
+                onRemove={() => handleRemoveProduct(product.id)}
+              />
             ))}
           </div>
         ) : (

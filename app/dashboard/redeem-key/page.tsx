@@ -13,59 +13,90 @@ import {
 } from "@/components/ui/select"
 import { Gift, Key, ArrowRight, AlertCircle, CheckCircle2, Loader2, RefreshCw } from "lucide-react"
 import Link from "next/link"
-import { useKeyAuth } from "@/lib/keyauth-context"
+import { useKeyAuth, type SavedApp } from "@/lib/keyauth-context"
 import { getSubscriptions, redeemLicense, type SubscriptionPlan } from "@/lib/keyauth-api"
 import { logRedemption } from "@/lib/actions"
 
 export default function RedeemKeyPage() {
-  const { sellerKey, appDetails } = useKeyAuth()
+  const { sellerKey, appDetails, savedApps, isOwner } = useKeyAuth()
 
-  const [apps, setApps] = useState<SubscriptionPlan[]>([])
+  // For regular users, use savedApps as available apps
+  const [availableApps, setAvailableApps] = useState<SavedApp[]>([])
+  const [subscriptions, setSubscriptions] = useState<SubscriptionPlan[]>([])
   const [appsLoading, setAppsLoading] = useState(false)
   const [appsError, setAppsError] = useState<string | null>(null)
 
-  const [selectedApp, setSelectedApp] = useState("")
+  const [selectedAppKey, setSelectedAppKey] = useState("")
+  const [selectedSubscription, setSelectedSubscription] = useState("")
   const [licenseKey, setLicenseKey] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle")
   const [message, setMessage] = useState("")
 
-  // Fetch real subscriptions/apps from the seller key
-  const loadApps = async () => {
-    if (!sellerKey) return
+  // Get the selected app details
+  const selectedApp = availableApps.find(app => app.sellerKey === selectedAppKey)
+
+  // Load subscriptions when app is selected
+  const loadSubscriptions = async (appSellerKey: string) => {
     setAppsLoading(true)
     setAppsError(null)
     try {
-      const res = await getSubscriptions(sellerKey)
+      const res = await getSubscriptions(appSellerKey)
       if (res.success && Array.isArray(res.subscriptions)) {
-        setApps(res.subscriptions as SubscriptionPlan[])
+        setSubscriptions(res.subscriptions as SubscriptionPlan[])
       } else {
-        setAppsError(res.message || "Failed to load apps.")
+        setAppsError(res.message || "Failed to load subscription plans.")
       }
     } catch (err) {
-      setAppsError(err instanceof Error ? err.message : "Failed to load apps.")
+      setAppsError(err instanceof Error ? err.message : "Failed to load subscription plans.")
     } finally {
       setAppsLoading(false)
     }
   }
 
+  // Initialize available apps from savedApps or current owner app
   useEffect(() => {
-    if (sellerKey) loadApps()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sellerKey])
+    if (savedApps.length > 0) {
+      setAvailableApps(savedApps)
+      // Auto-select the first app or current active app
+      const activeApp = savedApps.find(app => app.sellerKey === sellerKey) || savedApps[0]
+      if (activeApp) {
+        setSelectedAppKey(activeApp.sellerKey)
+        loadSubscriptions(activeApp.sellerKey)
+      }
+    } else if (isOwner && sellerKey && appDetails) {
+      // Fallback for owner without savedApps
+      const ownerApp: SavedApp = {
+        sellerKey,
+        appDetails,
+        stats: { totusers: "0", totalkeys: "0", onlineusers: "0", totalfiles: "0" }
+      }
+      setAvailableApps([ownerApp])
+      setSelectedAppKey(sellerKey)
+      loadSubscriptions(sellerKey)
+    }
+  }, [savedApps, sellerKey, appDetails, isOwner])
+
+  // Reload subscriptions when selected app changes
+  useEffect(() => {
+    if (selectedAppKey) {
+      setSelectedSubscription("")
+      loadSubscriptions(selectedAppKey)
+    }
+  }, [selectedAppKey])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!selectedApp || !licenseKey.trim()) {
       setStatus("error")
-      setMessage("Please select a product and enter a license key.")
+      setMessage("Please select an application and enter a license key.")
       return
     }
 
-    if (!appDetails?.name || !appDetails?.ownerid) {
+    if (!selectedApp.appDetails?.name || !selectedApp.appDetails?.ownerid) {
       setStatus("error")
-      setMessage("App configuration is missing. Please ask the owner to log in first.")
+      setMessage("App configuration is missing. Please contact the owner.")
       return
     }
 
@@ -74,14 +105,14 @@ export default function RedeemKeyPage() {
 
     try {
       const result = await redeemLicense(
-        appDetails.name,
-        appDetails.ownerid,
+        selectedApp.appDetails.name,
+        selectedApp.appDetails.ownerid,
         licenseKey.trim()
       )
 
       // Log the redemption attempt to Supabase
       logRedemption({
-        appName: selectedApp,
+        appName: selectedApp.appDetails.name,
         licenseKey: licenseKey.trim(),
         success: result.success,
         message: result.message || "",
@@ -93,7 +124,17 @@ export default function RedeemKeyPage() {
         setStatus("success")
         setMessage(result.message || "License key activated successfully! Your subscription is now active.")
         setLicenseKey("")
-        setSelectedApp("")
+        // Store the redeemed license for the Downloads page
+        if (typeof window !== "undefined") {
+          const storedLicenses = JSON.parse(localStorage.getItem("flake_redeemed_licenses") || "[]")
+          storedLicenses.push({
+            appName: selectedApp.appDetails.name,
+            licenseKey: licenseKey.trim(),
+            redeemedAt: new Date().toISOString(),
+            sellerKey: selectedApp.sellerKey,
+          })
+          localStorage.setItem("flake_redeemed_licenses", JSON.stringify(storedLicenses))
+        }
       } else {
         setStatus("error")
         setMessage(result.message || "Invalid license key. Please check your key and try again.")
@@ -140,67 +181,46 @@ export default function RedeemKeyPage() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-5">
-                {/* Product Selection */}
+                {/* Application Selection */}
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium text-muted-foreground">
-                      Select Product
-                    </label>
-                    {sellerKey && (
-                      <button
-                        type="button"
-                        onClick={loadApps}
-                        disabled={appsLoading}
-                        className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
-                      >
-                        <RefreshCw className={`h-3 w-3 ${appsLoading ? "animate-spin" : ""}`} />
-                        Refresh
-                      </button>
-                    )}
-                  </div>
+                  <label className="text-sm font-medium text-muted-foreground">
+                    Select Application
+                  </label>
 
                   {appsError && (
                     <p className="text-xs text-destructive">{appsError}</p>
                   )}
 
-                  <Select
-                    value={selectedApp}
-                    onValueChange={setSelectedApp}
-                    disabled={appsLoading || apps.length === 0}
-                  >
-                    <SelectTrigger className="w-full h-12 bg-input border-primary/50 focus:border-primary focus:ring-primary">
-                      <SelectValue
-                        placeholder={
-                          appsLoading
-                            ? "Loading products..."
-                            : apps.length === 0
-                            ? "No products available"
-                            : "Select a product"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent className="bg-card border-border">
-                      {apps.map((app) => (
-                        <SelectItem
-                          key={app.name}
-                          value={app.name}
-                          className="focus:bg-secondary"
-                        >
-                          {app.name}
-                          {app.level ? (
-                            <span className="ml-2 text-xs text-muted-foreground">
-                              (Level {app.level})
-                            </span>
-                          ) : null}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  {!sellerKey && (
-                    <p className="text-xs text-muted-foreground">
-                      Products load automatically once the owner has configured the seller key.
-                    </p>
+                  {availableApps.length === 0 ? (
+                    <div className="p-4 rounded-lg border border-border bg-muted/30 text-center">
+                      <p className="text-sm text-muted-foreground mb-2">
+                        No applications available
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        An owner needs to configure applications first. If you are the owner, please log in with your seller key in the Overview page.
+                      </p>
+                    </div>
+                  ) : (
+                    <Select
+                      value={selectedAppKey}
+                      onValueChange={setSelectedAppKey}
+                      disabled={appsLoading}
+                    >
+                      <SelectTrigger className="w-full h-12 bg-input border-primary/50 focus:border-primary focus:ring-primary">
+                        <SelectValue placeholder="Select an application" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-card border-border">
+                        {availableApps.map((app) => (
+                          <SelectItem
+                            key={app.sellerKey}
+                            value={app.sellerKey}
+                            className="focus:bg-secondary"
+                          >
+                            {app.appDetails.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   )}
                 </div>
 
@@ -242,7 +262,7 @@ export default function RedeemKeyPage() {
                 {/* Submit Button */}
                 <Button
                   type="submit"
-                  disabled={isLoading || appsLoading || apps.length === 0}
+                  disabled={isLoading || appsLoading || availableApps.length === 0 || !selectedAppKey}
                   className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
                 >
                   {isLoading ? (

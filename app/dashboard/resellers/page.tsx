@@ -56,7 +56,9 @@ export default function ResellersPage() {
   const [createLoading, setCreateLoading] = useState(false)
   const [newUser, setNewUser] = useState("")
   const [newPass, setNewPass] = useState("")
-  const [newRole, setNewRole] = useState<"reseller" | "manager">("reseller")
+  const [newEmail, setNewEmail] = useState("")
+  const [newKeyLevels, setNewKeyLevels] = useState("1")
+  const [newRole, setNewRole] = useState<"Reseller" | "Manager">("Reseller")
 
   // Add balance dialog
   const [balanceOpen, setBalanceOpen] = useState(false)
@@ -94,13 +96,16 @@ export default function ResellersPage() {
   const handleCreate = async () => {
     if (!newUser || !newPass) return
     setCreateLoading(true)
+    setError(null)
     try {
-      const data = await createReseller(sellerKey, newUser, newPass, newRole)
+      const data = await createReseller(sellerKey, newUser, newPass, newRole, newEmail, newKeyLevels)
       if (data.success) {
         setCreateOpen(false)
         setNewUser("")
         setNewPass("")
-        setNewRole("reseller")
+        setNewEmail("")
+        setNewKeyLevels("1")
+        setNewRole("Reseller")
         fetchResellers()
       } else {
         setError(data.message || "Failed to create reseller")
@@ -262,6 +267,15 @@ export default function ResellersPage() {
                   />
                 </div>
                 <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    placeholder="reseller@example.com"
+                  />
+                </div>
+                <div className="space-y-2">
                   <Label>Password</Label>
                   <Input
                     type="password"
@@ -270,22 +284,33 @@ export default function ResellersPage() {
                     placeholder="Strong password"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>Role</Label>
-                  <Select value={newRole} onValueChange={(v) => setNewRole(v as "reseller" | "manager")}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="reseller">Reseller</SelectItem>
-                      <SelectItem value="manager">Manager</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Role</Label>
+                    <Select value={newRole} onValueChange={(v) => setNewRole(v as "Reseller" | "Manager")}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Reseller">Reseller</SelectItem>
+                        <SelectItem value="Manager">Manager</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Key Levels</Label>
+                    <Input
+                      value={newKeyLevels}
+                      onChange={(e) => setNewKeyLevels(e.target.value)}
+                      placeholder="1,2,3"
+                    />
+                    <p className="text-xs text-muted-foreground">Comma-separated levels</p>
+                  </div>
                 </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-                <Button onClick={handleCreate} disabled={createLoading || !newUser || !newPass}>
+                <Button onClick={handleCreate} disabled={createLoading || !newUser || !newPass || !newEmail}>
                   {createLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   Create
                 </Button>

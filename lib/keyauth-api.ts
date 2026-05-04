@@ -459,11 +459,25 @@ export async function createBlacklist(
   data: string,
   type: "hwid" | "ip"
 ) {
-  return keyauthRequest(sellerKey, "black", { type, data });
+  // KeyAuth API expects the parameter name to match the type (ip or hwid)
+  const params: Record<string, string> = {};
+  if (type === "ip") {
+    params.ip = data;
+  } else {
+    params.hwid = data;
+  }
+  return keyauthRequest(sellerKey, "black", params);
 }
 
 export async function deleteBlacklist(sellerKey: string, data: string, blacklistType: string) {
-  return keyauthRequest(sellerKey, "delblack", { data, blacktype: blacklistType });
+  // KeyAuth API expects the parameter name to match the type (ip or hwid)
+  const params: Record<string, string> = {};
+  if (blacklistType === "ip") {
+    params.ip = data;
+  } else {
+    params.hwid = data;
+  }
+  return keyauthRequest(sellerKey, "delblack", params);
 }
 
 export async function deleteAllBlacklists(sellerKey: string) {
@@ -518,7 +532,7 @@ export async function deleteAllWhitelists(sellerKey: string) {
 export async function getAllResellers(sellerKey: string) {
   return keyauthRequest<{ accounts: { user: string; role: string; balance: number }[] }>(
     sellerKey,
-    "fetchallresellers"
+    "fetchteam"
   );
 }
 
@@ -530,12 +544,25 @@ export async function addResellerBalance(sellerKey: string, user: string, balanc
   return keyauthRequest(sellerKey, "addbalance", { user, balance });
 }
 
-export async function createReseller(sellerKey: string, user: string, pass: string, role: "reseller" | "manager") {
-  return keyauthRequest(sellerKey, "addaccount", { user, pass, role });
+export async function createReseller(
+  sellerKey: string, 
+  user: string, 
+  pass: string, 
+  role: "Reseller" | "Manager",
+  email: string = "",
+  keylevels: string = "1"
+) {
+  return keyauthRequest(sellerKey, "addAccount", { 
+    user, 
+    pass, 
+    role,
+    email: email || `${user}@placeholder.com`,
+    keylevels
+  });
 }
 
 export async function deleteReseller(sellerKey: string, user: string) {
-  return keyauthRequest(sellerKey, "delaccount", { user });
+  return keyauthRequest(sellerKey, "delAccount", { user });
 }
 
 // Web Loader
