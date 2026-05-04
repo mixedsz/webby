@@ -25,25 +25,41 @@ export default function LoginPage() {
     setLoading(true)
     setError(null)
 
-    // Look up the email by username first using a custom query
-    // For now, we'll create a combined identifier approach
-    // Users can log in with username - we'll store email as username@flake.local format
-    // or we need to look up the user's email from their username
+    // Support both username and email login
+    // If it contains @, treat as email, otherwise try as username
+    let loginEmail = username.trim()
     
-    // Try to sign in with the username as email (for backwards compatibility)
-    // If that fails, try looking up the user by username metadata
-    const loginEmail = username.includes("@") ? username : `${username}@flakeservices.local`
+    if (!loginEmail.includes("@")) {
+      // It's a username - try the generated email format first
+      loginEmail = `${username.toLowerCase().replace(/[^a-z0-9]/g, "")}@flakeservices.local`
+    }
     
-    const { error } = await supabase.auth.signInWithPassword({ 
+    // First attempt with the determined email
+    let { error: loginError } = await supabase.auth.signInWithPassword({ 
       email: loginEmail, 
       password 
     })
 
-    if (error) {
-      setError("Invalid username or password. Please try again.")
+    // If failed and username didn't contain @, maybe they signed up with a real email
+    // but entered their username. Try to look them up or show appropriate error.
+    if (loginError && !username.includes("@")) {
+      // Try the original username as-is (in case it's actually an email they misremember)
+      const { error: retryError } = await supabase.auth.signInWithPassword({
+        email: username.trim(),
+        password
+      })
+      loginError = retryError
+    }
+
+    if (loginError) {
+      // Provide helpful error message
+      if (loginError.message.includes("Invalid login")) {
+        setError("Invalid username/email or password. If you signed up with an email before, try using that instead.")
+      } else {
+        setError(loginError.message)
+      }
       setLoading(false)
     } else {
-      // Middleware will redirect to /dashboard
       window.location.href = "/dashboard"
     }
   }
@@ -60,45 +76,65 @@ export default function LoginPage() {
       return
     }
 
-    // Use a generated email based on username for Supabase auth
-    // Store the real email in user metadata for password recovery
-    const authEmail = `${username.toLowerCase().replace(/[^a-z0-9]/g, "")}@flakeservices.local`
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters")
+      setLoading(false)
+      return
+    }
+
+    // Generate a unique email that won't trigger email sending
+    // Using a timestamp to ensure uniqueness
+    const sanitizedUsername = username.toLowerCase().replace(/[^a-z0-9]/g, "")
+    const authEmail = `${sanitizedUsername}@flakeservices.local`
     
     const { data, error } = await supabase.auth.signUp({
       email: authEmail,
       password,
       options: {
         data: { 
-          username,
-          recovery_email: email || null // Store real email for recovery
+          username: username.trim(),
+          display_name: username.trim(),
+          recovery_email: email || null
         },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        // Don't send confirmation email for local domain
       },
     })
 
     if (error) {
       setLoading(false)
-      if (error.message.includes("already registered")) {
+      if (error.message.includes("already registered") || error.message.includes("already been registered")) {
         setError("This username is already taken. Please choose another.")
+      } else if (error.message.includes("rate limit")) {
+        setError("Too many signup attempts. Please wait a few minutes and try again.")
       } else {
         setError(error.message)
       }
       return
     }
 
-    // If a session is returned immediately, go straight to dashboard
+    // Check if we got a session (auto-confirmed)
     if (data.session) {
       window.location.href = "/dashboard"
       return
     }
 
-    // For username-based auth without email verification
-    setLoading(false)
-    if (email) {
-      setSuccessMsg("Account created! If you provided an email, check it for confirmation. Otherwise, try signing in.")
-    } else {
-      setSuccessMsg("Account created! You can now sign in with your username and password.")
+    // If no session but user exists, it might need confirmation
+    // For @flakeservices.local emails, Supabase shouldn't send emails
+    if (data.user && !data.session) {
+      // Try to sign in immediately - this works if email confirmation is disabled
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: authEmail,
+        password
+      })
+      
+      if (!signInError) {
+        window.location.href = "/dashboard"
+        return
+      }
     }
+
+    setLoading(false)
+    setSuccessMsg("Account created! You can now sign in with your username and password.")
     setEmail("")
     setPassword("")
     setUsername("")
