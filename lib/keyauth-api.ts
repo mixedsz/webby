@@ -1,9 +1,7 @@
-// KeyAuth Seller API Client
-// Calls KeyAuth directly from the browser so requests originate from the user's IP,
-// satisfying KeyAuth's IP whitelist requirement.
+// KeyAuth Seller API Client (proxied through /api/keyauth to avoid CORS)
 // Documentation: https://keyauthdocs.apidog.io/
 
-const KEYAUTH_API_BASE = "https://keyauth.win/api/seller/";
+const KEYAUTH_API_BASE = "/api/keyauth";
 
 export interface KeyAuthResponse<T = unknown> {
   success: boolean;

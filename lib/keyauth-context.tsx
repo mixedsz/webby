@@ -64,12 +64,8 @@ export function KeyAuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const tempKey = key.trim();
 
-      // Call KeyAuth DIRECTLY from the browser so the request comes from YOUR IP,
-      // not the Vercel server IP. This satisfies KeyAuth's IP whitelist requirement.
-      const KEYAUTH_SELLER_URL = "https://keyauth.win/api/seller/";
-
       const statsParams = new URLSearchParams({ sellerkey: tempKey, type: "stats" });
-      const statsRes = await fetch(`${KEYAUTH_SELLER_URL}?${statsParams.toString()}`);
+      const statsRes = await fetch(`/api/keyauth?${statsParams.toString()}`);
       const statsData = await statsRes.json();
 
       if (!statsData.success) {
@@ -79,7 +75,7 @@ export function KeyAuthProvider({ children }: { children: React.ReactNode }) {
 
       // Fetch app details to verify the owner ID
       const detailsParams = new URLSearchParams({ sellerkey: tempKey, type: "appdetails" });
-      const detailsRes = await fetch(`${KEYAUTH_SELLER_URL}?${detailsParams.toString()}`);
+      const detailsRes = await fetch(`/api/keyauth?${detailsParams.toString()}`);
       const detailsData = await detailsRes.json();
 
       const ownerMatches =
