@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const KEYAUTH_API_BASE = "https://keyauth.win/api/seller/";
+// This proxies to the KeyAuth *user-facing* API (not seller API)
+// Used for license verification/activation by end users
+const KEYAUTH_USER_API = "https://keyauth.win/api/1.2/";
 
-export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams;
-
-  // Forward all query params to KeyAuth
-  const url = new URL(KEYAUTH_API_BASE);
-  searchParams.forEach((value, key) => {
-    url.searchParams.set(key, value);
-  });
-
+export async function POST(request: NextRequest) {
   try {
-    const response = await fetch(url.toString(), {
+    const body = await request.json();
+
+    // Build form data — KeyAuth user API expects query params via GET
+    const params = new URLSearchParams();
+    Object.entries(body).forEach(([k, v]) => {
+      params.set(k, String(v));
+    });
+
+    const url = `${KEYAUTH_USER_API}?${params.toString()}`;
+
+    const response = await fetch(url, {
       method: "GET",
       cache: "no-store",
       headers: {
@@ -25,7 +29,6 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Try to parse JSON even on non-2xx so we can forward the KeyAuth error message
     let data: unknown;
     const contentType = response.headers.get("content-type") || "";
     if (contentType.includes("application/json")) {
@@ -35,16 +38,19 @@ export async function GET(request: NextRequest) {
       try {
         data = JSON.parse(text);
       } catch {
-        data = { success: false, message: `KeyAuth API error ${response.status}: ${text.slice(0, 200)}` };
+        data = {
+          success: false,
+          message: `KeyAuth error ${response.status}: ${text.slice(0, 300)}`,
+        };
       }
     }
 
-    return NextResponse.json(data, { status: response.ok ? 200 : response.status });
+    return NextResponse.json(data, { status: 200 });
   } catch (error) {
     return NextResponse.json(
       {
         success: false,
-        message: error instanceof Error ? error.message : "Failed to connect to KeyAuth API",
+        message: error instanceof Error ? error.message : "Failed to connect to KeyAuth",
       },
       { status: 500 }
     );

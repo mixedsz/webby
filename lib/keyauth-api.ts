@@ -474,6 +474,29 @@ export async function deleteAllBlacklists(sellerKey: string) {
 // Aliases used by dashboard pages
 export const getBlacklists = getAllBlacklists;
 export const getLogs = getAllLogs;
+export const getSubscriptions = getAllSubscriptions;
+
+// Redeem a license key via the KeyAuth *user-facing* API (proxied server-side)
+// appName must match the KeyAuth application name exactly
+export async function redeemLicense(
+  appName: string,
+  ownerid: string,
+  licenseKey: string,
+  version = "1.0"
+): Promise<{ success: boolean; message: string }> {
+  const response = await fetch("/api/keyauth-user", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: "license",
+      key: licenseKey,
+      name: appName,
+      ownerid,
+      ver: version,
+    }),
+  });
+  return response.json();
+}
 
 // Type aliases used by dashboard pages
 export type Blacklist = { hwid?: string; ip?: string; type: string };

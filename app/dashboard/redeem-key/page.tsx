@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,48 +11,88 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Gift, Key, ArrowRight, AlertCircle, CheckCircle2, Loader2 } from "lucide-react"
+import { Gift, Key, ArrowRight, AlertCircle, CheckCircle2, Loader2, RefreshCw } from "lucide-react"
 import Link from "next/link"
-
-const products = [
-  { id: "boost-bot", name: "Boost Bot" },
-  { id: "sellauth-aio", name: "SellAuth AIO" },
-  { id: "keyauth-bot", name: "KeyAuth Bot" },
-  { id: "discord-tool", name: "Discord Tool" },
-]
+import { useKeyAuth } from "@/lib/keyauth-context"
+import { getSubscriptions, redeemLicense, type SubscriptionPlan } from "@/lib/keyauth-api"
 
 export default function RedeemKeyPage() {
-  const [selectedProduct, setSelectedProduct] = useState("")
+  const { sellerKey, appDetails } = useKeyAuth()
+
+  const [apps, setApps] = useState<SubscriptionPlan[]>([])
+  const [appsLoading, setAppsLoading] = useState(false)
+  const [appsError, setAppsError] = useState<string | null>(null)
+
+  const [selectedApp, setSelectedApp] = useState("")
   const [licenseKey, setLicenseKey] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle")
   const [message, setMessage] = useState("")
 
+  // Fetch real subscriptions/apps from the seller key
+  const loadApps = async () => {
+    if (!sellerKey) return
+    setAppsLoading(true)
+    setAppsError(null)
+    try {
+      const res = await getSubscriptions(sellerKey)
+      if (res.success && Array.isArray(res.subscriptions)) {
+        setApps(res.subscriptions as SubscriptionPlan[])
+      } else {
+        setAppsError(res.message || "Failed to load apps.")
+      }
+    } catch (err) {
+      setAppsError(err instanceof Error ? err.message : "Failed to load apps.")
+    } finally {
+      setAppsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (sellerKey) loadApps()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sellerKey])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    if (!selectedProduct || !licenseKey) {
+
+    if (!selectedApp || !licenseKey.trim()) {
       setStatus("error")
-      setMessage("Please select a product and enter a license key")
+      setMessage("Please select a product and enter a license key.")
+      return
+    }
+
+    if (!appDetails?.name || !appDetails?.ownerid) {
+      setStatus("error")
+      setMessage("App configuration is missing. Please ask the owner to log in first.")
       return
     }
 
     setIsLoading(true)
     setStatus("idle")
-    
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    
-    // Mock validation - in real app, this would call KeyAuth API
-    if (licenseKey.length >= 10) {
-      setStatus("success")
-      setMessage("License key activated successfully! Your subscription is now active.")
-    } else {
+
+    try {
+      const result = await redeemLicense(
+        appDetails.name,
+        appDetails.ownerid,
+        licenseKey.trim()
+      )
+
+      if (result.success) {
+        setStatus("success")
+        setMessage(result.message || "License key activated successfully! Your subscription is now active.")
+        setLicenseKey("")
+        setSelectedApp("")
+      } else {
+        setStatus("error")
+        setMessage(result.message || "Invalid license key. Please check your key and try again.")
+      }
+    } catch (err) {
       setStatus("error")
-      setMessage("Invalid license key. Please check your key and try again.")
+      setMessage(err instanceof Error ? err.message : "An unexpected error occurred.")
+    } finally {
+      setIsLoading(false)
     }
-    
-    setIsLoading(false)
   }
 
   return (
@@ -91,25 +131,66 @@ export default function RedeemKeyPage() {
               <form onSubmit={handleSubmit} className="space-y-5">
                 {/* Product Selection */}
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Select Product
-                  </label>
-                  <Select value={selectedProduct} onValueChange={setSelectedProduct}>
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-muted-foreground">
+                      Select Product
+                    </label>
+                    {sellerKey && (
+                      <button
+                        type="button"
+                        onClick={loadApps}
+                        disabled={appsLoading}
+                        className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+                      >
+                        <RefreshCw className={`h-3 w-3 ${appsLoading ? "animate-spin" : ""}`} />
+                        Refresh
+                      </button>
+                    )}
+                  </div>
+
+                  {appsError && (
+                    <p className="text-xs text-destructive">{appsError}</p>
+                  )}
+
+                  <Select
+                    value={selectedApp}
+                    onValueChange={setSelectedApp}
+                    disabled={appsLoading || apps.length === 0}
+                  >
                     <SelectTrigger className="w-full h-12 bg-input border-primary/50 focus:border-primary focus:ring-primary">
-                      <SelectValue placeholder="Select a product" />
+                      <SelectValue
+                        placeholder={
+                          appsLoading
+                            ? "Loading products..."
+                            : apps.length === 0
+                            ? "No products available"
+                            : "Select a product"
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent className="bg-card border-border">
-                      {products.map((product) => (
+                      {apps.map((app) => (
                         <SelectItem
-                          key={product.id}
-                          value={product.id}
+                          key={app.name}
+                          value={app.name}
                           className="focus:bg-secondary"
                         >
-                          {product.name}
+                          {app.name}
+                          {app.level ? (
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              (Level {app.level})
+                            </span>
+                          ) : null}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+
+                  {!sellerKey && (
+                    <p className="text-xs text-muted-foreground">
+                      Products load automatically once the owner has configured the seller key.
+                    </p>
+                  )}
                 </div>
 
                 {/* License Key Input */}
@@ -150,7 +231,7 @@ export default function RedeemKeyPage() {
                 {/* Submit Button */}
                 <Button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || appsLoading || apps.length === 0}
                   className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
                 >
                   {isLoading ? (
