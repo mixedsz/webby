@@ -21,6 +21,8 @@ import {
   Loader2,
   Gift,
   Shield,
+  Plus,
+  Layers,
 } from "lucide-react"
 import Link from "next/link"
 
@@ -38,6 +40,8 @@ export default function DashboardOverview() {
     error,
     refreshData,
     clearOwnerKey,
+    savedApps,
+    switchApp,
   } = useKeyAuth()
 
   const [inputKey, setInputKey] = useState("")
@@ -95,7 +99,7 @@ export default function DashboardOverview() {
   if (!role) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
-        <div className="w-full max-w-md space-y-8">
+        <div className="w-full max-w-md space-y-6">
           {/* Logo */}
           <div className="flex flex-col items-center gap-4">
             <Image
@@ -111,12 +115,50 @@ export default function DashboardOverview() {
             </p>
           </div>
 
-          {/* Owner login */}
+          {/* Saved Apps - Quick Switch */}
+          {savedApps.length > 0 && (
+            <Card className="border-border">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <Layers className="h-5 w-5 text-primary" />
+                  <CardTitle className="text-base">Your Applications</CardTitle>
+                </div>
+                <CardDescription>
+                  Quick switch to a previously connected application
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {savedApps.map((app) => (
+                  <Button
+                    key={app.sellerKey}
+                    variant="outline"
+                    className="w-full justify-start h-auto py-3 px-4"
+                    onClick={() => switchApp(app)}
+                  >
+                    <div className="flex flex-col items-start gap-0.5">
+                      <span className="font-medium">{app.appDetails.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {app.stats.totusers} users / {app.stats.totalkeys} keys
+                      </span>
+                    </div>
+                  </Button>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Owner login - Add New App */}
           <Card className="border-border">
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
-                <Shield className="h-5 w-5 text-primary" />
-                <CardTitle className="text-base">Owner Access</CardTitle>
+                {savedApps.length > 0 ? (
+                  <Plus className="h-5 w-5 text-primary" />
+                ) : (
+                  <Shield className="h-5 w-5 text-primary" />
+                )}
+                <CardTitle className="text-base">
+                  {savedApps.length > 0 ? "Add New Application" : "Owner Access"}
+                </CardTitle>
               </div>
               <CardDescription>
                 Enter your KeyAuth seller key. Access is restricted to the Flake Services owner account.{" "}
@@ -167,6 +209,11 @@ export default function DashboardOverview() {
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Verifying...
+                  </>
+                ) : savedApps.length > 0 ? (
+                  <>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Application
                   </>
                 ) : (
                   <>

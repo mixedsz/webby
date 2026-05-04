@@ -279,6 +279,9 @@ export function KeyAuthProvider({ children }: { children: React.ReactNode }) {
         refreshData,
         clearOwnerKey,
         isConfigured,
+        savedApps,
+        switchApp,
+        removeApp,
       }}
     >
       {children}
