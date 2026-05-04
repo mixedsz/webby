@@ -119,7 +119,7 @@ export default function DashboardOverview() {
                 <CardTitle className="text-base">Owner Access</CardTitle>
               </div>
               <CardDescription>
-                Enter your KeyAuth seller key to access the full owner dashboard.{" "}
+                Enter your KeyAuth seller key. Access is restricted to the Flake Services owner account.{" "}
                 <a
                   href="https://keyauth.cc/app/?page=seller-settings"
                   target="_blank"

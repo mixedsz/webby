@@ -48,8 +48,11 @@ export function KeyAuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // The KeyAuth owner ID for Flake Services — only this owner gets full dashboard access
+  const OWNER_ID = "Bv200ABmNA";
+
   const setSellerKey = useCallback(async (key: string) => {
-    if (!key || key.trim().length < 10) {
+    if (!key || key.trim().length < 5) {
       setError("Please enter a valid seller key.");
       return;
     }
@@ -58,34 +61,46 @@ export function KeyAuthProvider({ children }: { children: React.ReactNode }) {
     setError(null);
 
     try {
-      // Verify the key by hitting the API through our proxy
       const tempKey = key.trim();
-      const searchParams = new URLSearchParams({ sellerkey: tempKey, type: "appdetails" });
-      const res = await fetch(`/api/keyauth?${searchParams.toString()}`);
-      const data = await res.json();
 
-      if (data.success && data.appdetails) {
-        setSellerKeyState(tempKey);
-        setAppDetails(data.appdetails as AppDetails);
-        setRoleState("owner");
-        if (typeof window !== "undefined") {
-          localStorage.setItem("flake_seller_key", tempKey);
-          localStorage.setItem("flake_role", "owner");
-        }
-        // Also fetch stats
-        const statsParams = new URLSearchParams({ sellerkey: tempKey, type: "stats" });
-        const statsRes = await fetch(`/api/keyauth?${statsParams.toString()}`);
-        const statsData = await statsRes.json();
-        if (statsData.success) {
-          setStats({
-            totusers: statsData.totusers ?? "0",
-            totalkeys: statsData.totalkeys ?? "0",
-            onlineusers: statsData.onlineusers ?? "0",
-            totalfiles: statsData.totalfiles ?? "0",
-          });
-        }
-      } else {
-        setError(data.message || "Invalid seller key. Please check and try again.");
+      // Use "stats" first — it's the lightest call and doesn't 423
+      const statsParams = new URLSearchParams({ sellerkey: tempKey, type: "stats" });
+      const statsRes = await fetch(`/api/keyauth?${statsParams.toString()}`);
+      const statsData = await statsRes.json();
+
+      if (!statsData.success) {
+        setError(statsData.message || "Invalid seller key. Please check and try again.");
+        return;
+      }
+
+      // Now fetch app details to verify the owner ID
+      const detailsParams = new URLSearchParams({ sellerkey: tempKey, type: "appdetails" });
+      const detailsRes = await fetch(`/api/keyauth?${detailsParams.toString()}`);
+      const detailsData = await detailsRes.json();
+
+      const ownerMatches =
+        detailsData.success &&
+        detailsData.appdetails &&
+        (detailsData.appdetails as AppDetails).ownerid === OWNER_ID;
+
+      if (!ownerMatches) {
+        setError("Owner ID mismatch. This seller key does not belong to the Flake Services owner account.");
+        return;
+      }
+
+      setSellerKeyState(tempKey);
+      setAppDetails(detailsData.appdetails as AppDetails);
+      setRoleState("owner");
+      setStats({
+        totusers: statsData.totusers ?? "0",
+        totalkeys: statsData.totalkeys ?? "0",
+        onlineusers: statsData.onlineusers ?? "0",
+        totalfiles: statsData.totalfiles ?? "0",
+      });
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("flake_seller_key", tempKey);
+        localStorage.setItem("flake_role", "owner");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to verify seller key.");

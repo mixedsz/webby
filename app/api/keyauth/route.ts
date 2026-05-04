@@ -13,22 +13,29 @@ export async function GET(request: NextRequest) {
 
   try {
     const response = await fetch(url.toString(), {
+      method: "GET",
+      cache: "no-store",
       headers: {
-        "User-Agent": "FlakeServices-Dashboard/1.0",
-        Accept: "application/json",
+        "User-Agent": "Mozilla/5.0 (compatible; FlakeServices/1.0)",
+        Accept: "application/json, text/plain, */*",
       },
-      // Server-side request — no CORS restrictions
     });
 
-    if (!response.ok) {
-      return NextResponse.json(
-        { success: false, message: `KeyAuth API error: ${response.status} ${response.statusText}` },
-        { status: response.status }
-      );
+    // Try to parse JSON even on non-2xx so we can forward the KeyAuth error message
+    let data: unknown;
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { success: false, message: `KeyAuth API error ${response.status}: ${text.slice(0, 200)}` };
+      }
     }
 
-    const data = await response.json();
-    return NextResponse.json(data);
+    return NextResponse.json(data, { status: response.ok ? 200 : response.status });
   } catch (error) {
     return NextResponse.json(
       {

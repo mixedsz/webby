@@ -471,6 +471,14 @@ export async function deleteAllBlacklists(sellerKey: string) {
   return keyauthRequest(sellerKey, "delallblacklists");
 }
 
+// Aliases used by dashboard pages
+export const getBlacklists = getAllBlacklists;
+export const getLogs = getAllLogs;
+
+// Type aliases used by dashboard pages
+export type Blacklist = { hwid?: string; ip?: string; type: string };
+export type LogEntry = Log;
+
 // Whitelists
 export async function addToWhitelist(sellerKey: string, ip: string) {
   return keyauthRequest(sellerKey, "addwhite", { ip });
