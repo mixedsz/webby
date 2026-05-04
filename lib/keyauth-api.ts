@@ -448,7 +448,7 @@ export async function deleteAllLogs(sellerKey: string) {
 
 // Blacklists
 export async function getAllBlacklists(sellerKey: string) {
-  return keyauthRequest<{ blacklists: { hwid?: string; ip?: string; type: string }[] }>(
+  return keyauthRequest<{ blacklists: { blacklist: string; blacktype: string }[] }>(
     sellerKey,
     "fetchallblacklists"
   );
@@ -456,11 +456,10 @@ export async function getAllBlacklists(sellerKey: string) {
 
 export async function createBlacklist(
   sellerKey: string,
-  type: "hwid" | "ip",
   data: string,
-  blacklistType: "block" | "add"
+  type: "hwid" | "ip"
 ) {
-  return keyauthRequest(sellerKey, "black", { type, data, blacktype: blacklistType });
+  return keyauthRequest(sellerKey, "black", { type, data });
 }
 
 export async function deleteBlacklist(sellerKey: string, data: string, blacklistType: string) {
@@ -499,7 +498,7 @@ export async function redeemLicense(
 }
 
 // Type aliases used by dashboard pages
-export type Blacklist = { hwid?: string; ip?: string; type: string };
+export type Blacklist = { blacklist: string; blacktype: string };
 export type LogEntry = Log;
 
 // Whitelists

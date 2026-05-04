@@ -6,6 +6,12 @@ import { getSellerKey, saveSellerKey } from "./actions";
 
 type UserRole = "owner" | "user" | null;
 
+export interface SavedApp {
+  sellerKey: string;
+  appDetails: AppDetails;
+  stats: AppStats;
+}
+
 interface FlakeContextType {
   sellerKey: string;
   setSellerKey: (key: string) => void;
@@ -19,6 +25,10 @@ interface FlakeContextType {
   error: string | null;
   refreshData: () => Promise<void>;
   clearOwnerKey: () => void;
+  // Multi-app support
+  savedApps: SavedApp[];
+  switchApp: (app: SavedApp) => void;
+  removeApp: (sellerKey: string) => void;
   // Legacy alias
   isConfigured: boolean;
 }
@@ -33,6 +43,7 @@ export function KeyAuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savedApps, setSavedApps] = useState<SavedApp[]>([]);
 
   const isOwner = role === "owner";
   // isConfigured is true when we have a valid seller key (owner) OR a user has selected a role
@@ -103,6 +114,26 @@ export function KeyAuthProvider({ children }: { children: React.ReactNode }) {
         console.error("[keyauth] failed to persist seller key:", err)
       );
 
+      // Save to multi-app list
+      const newApp: SavedApp = {
+        sellerKey: tempKey,
+        appDetails: detailsData.appdetails as AppDetails,
+        stats: {
+          totusers: statsData.totusers ?? "0",
+          totalkeys: statsData.totalkeys ?? "0",
+          onlineusers: statsData.onlineusers ?? "0",
+          totalfiles: statsData.totalfiles ?? "0",
+        },
+      };
+      setSavedApps((prev) => {
+        const filtered = prev.filter((a) => a.sellerKey !== tempKey);
+        const updated = [...filtered, newApp];
+        if (typeof window !== "undefined") {
+          localStorage.setItem("flake_saved_apps", JSON.stringify(updated));
+        }
+        return updated;
+      });
+
       if (typeof window !== "undefined") {
         localStorage.setItem("flake_seller_key", tempKey);
         localStorage.setItem("flake_role", "owner");
@@ -113,6 +144,38 @@ export function KeyAuthProvider({ children }: { children: React.ReactNode }) {
       setIsVerifying(false);
     }
   }, []);
+
+  const switchApp = useCallback((app: SavedApp) => {
+    setSellerKeyState(app.sellerKey);
+    setAppDetails(app.appDetails);
+    setStats(app.stats);
+    setRoleState("owner");
+    if (typeof window !== "undefined") {
+      localStorage.setItem("flake_seller_key", app.sellerKey);
+      localStorage.setItem("flake_role", "owner");
+    }
+  }, []);
+
+  const removeApp = useCallback((key: string) => {
+    setSavedApps((prev) => {
+      const updated = prev.filter((a) => a.sellerKey !== key);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("flake_saved_apps", JSON.stringify(updated));
+      }
+      return updated;
+    });
+    // If removing active app, clear
+    if (key === sellerKey) {
+      setSellerKeyState("");
+      setRoleState(null);
+      setAppDetails(null);
+      setStats(null);
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("flake_seller_key");
+        localStorage.removeItem("flake_role");
+      }
+    }
+  }, [sellerKey]);
 
   const clearOwnerKey = useCallback(() => {
     setSellerKeyState("");
@@ -163,6 +226,13 @@ export function KeyAuthProvider({ children }: { children: React.ReactNode }) {
   // Restore session on mount — localStorage first, then fall back to Supabase DB
   useEffect(() => {
     if (typeof window === "undefined") return;
+
+    // Restore saved apps list
+    try {
+      const raw = localStorage.getItem("flake_saved_apps");
+      if (raw) setSavedApps(JSON.parse(raw) as SavedApp[]);
+    } catch { /* ignore */ }
+
     const savedKey = localStorage.getItem("flake_seller_key");
     const savedRole = localStorage.getItem("flake_role") as UserRole;
 

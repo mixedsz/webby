@@ -2,9 +2,32 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useKeyAuth } from "@/lib/keyauth-context"
+import {
+  getAllResellers,
+  createReseller,
+  deleteReseller,
+  addResellerBalance,
+} from "@/lib/keyauth-api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Table,
   TableBody,
@@ -13,43 +36,49 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { UserCog, RefreshCw, Search, AlertCircle } from "lucide-react"
+import { UserCog, RefreshCw, Plus, AlertCircle, Trash2, DollarSign, Search, Loader2 } from "lucide-react"
 
 interface Reseller {
   user: string
-  key: string
-  balance?: string
+  role: string
+  balance: number
 }
 
 export default function ResellersPage() {
-  const { sellerKey, isConfigured } = useKeyAuth()
+  const { sellerKey, isConfigured, isOwner } = useKeyAuth()
   const [resellers, setResellers] = useState<Reseller[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
 
+  // Create dialog
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createLoading, setCreateLoading] = useState(false)
+  const [newUser, setNewUser] = useState("")
+  const [newPass, setNewPass] = useState("")
+  const [newRole, setNewRole] = useState<"reseller" | "manager">("reseller")
+
+  // Add balance dialog
+  const [balanceOpen, setBalanceOpen] = useState(false)
+  const [balanceLoading, setBalanceLoading] = useState(false)
+  const [balanceUser, setBalanceUser] = useState("")
+  const [balanceAmount, setBalanceAmount] = useState("")
+
+  // Delete loading
+  const [deletingUser, setDeletingUser] = useState<string | null>(null)
+
   const fetchResellers = useCallback(async () => {
     if (!isConfigured) return
-
     setIsLoading(true)
     setError(null)
-
     try {
-      const response = await fetch("/api/keyauth/resellers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "fetchallresellers", sellerkey: sellerKey }),
-      })
-      const data = await response.json()
-      
-      if (data.success && data.resellers) {
-        setResellers(data.resellers)
+      const data = await getAllResellers(sellerKey)
+      if (data.success && Array.isArray((data as { accounts?: Reseller[] }).accounts)) {
+        setResellers((data as { accounts: Reseller[] }).accounts)
+      } else if (data.message?.toLowerCase().includes("no reseller")) {
+        setResellers([])
       } else {
-        if (data.message?.includes("No resellers")) {
-          setResellers([])
-        } else {
-          setError(data.message || "Failed to fetch resellers")
-        }
+        setError(data.message || "Failed to fetch resellers")
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred")
@@ -62,18 +91,77 @@ export default function ResellersPage() {
     fetchResellers()
   }, [fetchResellers])
 
-  const filteredResellers = resellers.filter((reseller) =>
-    reseller.user?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    reseller.key?.toLowerCase().includes(searchQuery.toLowerCase())
+  const handleCreate = async () => {
+    if (!newUser || !newPass) return
+    setCreateLoading(true)
+    try {
+      const data = await createReseller(sellerKey, newUser, newPass, newRole)
+      if (data.success) {
+        setCreateOpen(false)
+        setNewUser("")
+        setNewPass("")
+        setNewRole("reseller")
+        fetchResellers()
+      } else {
+        setError(data.message || "Failed to create reseller")
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred")
+    } finally {
+      setCreateLoading(false)
+    }
+  }
+
+  const handleDelete = async (user: string) => {
+    setDeletingUser(user)
+    try {
+      const data = await deleteReseller(sellerKey, user)
+      if (data.success) {
+        fetchResellers()
+      } else {
+        setError(data.message || "Failed to delete reseller")
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred")
+    } finally {
+      setDeletingUser(null)
+    }
+  }
+
+  const handleAddBalance = async () => {
+    const amount = parseFloat(balanceAmount)
+    if (!balanceUser || isNaN(amount) || amount <= 0) return
+    setBalanceLoading(true)
+    try {
+      const data = await addResellerBalance(sellerKey, balanceUser, amount)
+      if (data.success) {
+        setBalanceOpen(false)
+        setBalanceUser("")
+        setBalanceAmount("")
+        fetchResellers()
+      } else {
+        setError(data.message || "Failed to add balance")
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred")
+    } finally {
+      setBalanceLoading(false)
+    }
+  }
+
+  const filtered = resellers.filter(
+    (r) =>
+      r.user?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.role?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  if (!isConfigured) {
+  if (!isOwner) {
     return (
       <div className="p-6 lg:p-8">
-        <Card className="border-amber-500/30 bg-amber-500/5">
+        <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="flex items-center gap-3 py-6">
-            <AlertCircle className="h-5 w-5 text-amber-500" />
-            <p>Please configure your seller key in the Overview page first.</p>
+            <AlertCircle className="h-5 w-5 text-destructive" />
+            <p className="text-sm">Reseller management is restricted to the owner account.</p>
           </CardContent>
         </Card>
       </div>
@@ -89,12 +177,122 @@ export default function ResellersPage() {
             <UserCog className="h-6 w-6" />
             Resellers
           </h1>
-          <p className="text-muted-foreground">Manage your application resellers</p>
+          <p className="text-muted-foreground">
+            Manage resellers and managers. Creating a reseller automatically generates a rebrand of your app.
+          </p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchResellers} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={fetchResellers} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+
+          {/* Add Balance dialog */}
+          <Dialog open={balanceOpen} onOpenChange={setBalanceOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm">
+                <DollarSign className="h-4 w-4 mr-2" />
+                Add Balance
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Balance to Reseller</DialogTitle>
+                <DialogDescription>
+                  Add credits to an existing reseller account
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Reseller Username</Label>
+                  <Select value={balanceUser} onValueChange={setBalanceUser}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select reseller" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {resellers.map((r) => (
+                        <SelectItem key={r.user} value={r.user}>{r.user}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Amount</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={balanceAmount}
+                    onChange={(e) => setBalanceAmount(e.target.value)}
+                    placeholder="e.g. 10"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setBalanceOpen(false)}>Cancel</Button>
+                <Button onClick={handleAddBalance} disabled={balanceLoading || !balanceUser || !balanceAmount}>
+                  {balanceLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Add Balance
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Create reseller dialog */}
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                New Reseller
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create Reseller / Manager</DialogTitle>
+                <DialogDescription>
+                  A rebrand of your app is automatically created for this reseller on KeyAuth.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Username</Label>
+                  <Input
+                    value={newUser}
+                    onChange={(e) => setNewUser(e.target.value)}
+                    placeholder="reseller_username"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Password</Label>
+                  <Input
+                    type="password"
+                    value={newPass}
+                    onChange={(e) => setNewPass(e.target.value)}
+                    placeholder="Strong password"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Role</Label>
+                  <Select value={newRole} onValueChange={(v) => setNewRole(v as "reseller" | "manager")}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="reseller">Reseller</SelectItem>
+                      <SelectItem value="manager">Manager</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+                <Button onClick={handleCreate} disabled={createLoading || !newUser || !newPass}>
+                  {createLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Create
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Error */}
@@ -102,31 +300,11 @@ export default function ResellersPage() {
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="flex items-center gap-3 py-4">
             <AlertCircle className="h-5 w-5 text-destructive" />
-            <p className="text-sm">{error}</p>
-            <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setError(null)}>
-              Dismiss
-            </Button>
+            <p className="text-sm flex-1">{error}</p>
+            <Button variant="ghost" size="sm" onClick={() => setError(null)}>Dismiss</Button>
           </CardContent>
         </Card>
       )}
-
-      {/* Info Card */}
-      <Card className="border-blue-500/30 bg-blue-500/5">
-        <CardContent className="py-4">
-          <p className="text-sm text-blue-400">
-            Resellers can generate and manage license keys on your behalf. Visit the{" "}
-            <a 
-              href="https://keyauth.cc/app/?page=resellers" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="underline hover:text-blue-300"
-            >
-              KeyAuth dashboard
-            </a>{" "}
-            to add or manage resellers.
-          </p>
-        </CardContent>
-      </Card>
 
       {/* Search */}
       <Card>
@@ -143,13 +321,11 @@ export default function ResellersPage() {
         </CardContent>
       </Card>
 
-      {/* Resellers Table */}
+      {/* Table */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Reseller Accounts</CardTitle>
-          <CardDescription>
-            {filteredResellers.length} reseller(s)
-          </CardDescription>
+          <CardDescription>{filtered.length} reseller(s)</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -157,38 +333,55 @@ export default function ResellersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Username</TableHead>
-                  <TableHead className="hidden md:table-cell">Reseller Key</TableHead>
+                  <TableHead>Role</TableHead>
                   <TableHead>Balance</TableHead>
+                  <TableHead className="w-[80px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center py-8">
-                      <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2" />
+                    <TableCell colSpan={4} className="text-center py-8">
+                      <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
                       <p className="text-sm text-muted-foreground">Loading resellers...</p>
                     </TableCell>
                   </TableRow>
-                ) : filteredResellers.length === 0 ? (
+                ) : filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center py-8">
+                    <TableCell colSpan={4} className="text-center py-8">
                       <UserCog className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                       <p className="text-sm text-muted-foreground">No resellers found</p>
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredResellers.map((reseller, index) => (
-                    <TableRow key={index}>
+                  filtered.map((reseller) => (
+                    <TableRow key={reseller.user}>
                       <TableCell className="font-medium">{reseller.user}</TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        <code className="font-mono text-xs bg-muted px-2 py-1 rounded truncate max-w-[200px] block">
-                          {reseller.key}
-                        </code>
+                      <TableCell>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium ${
+                          reseller.role === "manager"
+                            ? "bg-amber-500/20 text-amber-500"
+                            : "bg-primary/20 text-primary"
+                        }`}>
+                          {reseller.role}
+                        </span>
                       </TableCell>
                       <TableCell>
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-primary/20 text-primary">
-                          {reseller.balance || "0"} credits
-                        </span>
+                        <span className="font-mono text-sm">{reseller.balance ?? 0} credits</span>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => handleDelete(reseller.user)}
+                          disabled={deletingUser === reseller.user}
+                        >
+                          {deletingUser === reseller.user
+                            ? <Loader2 className="h-4 w-4 animate-spin" />
+                            : <Trash2 className="h-4 w-4" />
+                          }
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))

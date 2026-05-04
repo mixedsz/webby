@@ -28,7 +28,7 @@ import {
 import { Download, Plus, RefreshCw, AlertCircle, Trash2, FileIcon, Link, ExternalLink } from "lucide-react"
 
 export default function FilesPage() {
-  const { sellerKey, isConfigured } = useKeyAuth()
+  const { sellerKey, isConfigured, appDetails } = useKeyAuth()
   const [files, setFiles] = useState<AppFile[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -138,10 +138,16 @@ export default function FilesPage() {
               <DialogHeader>
                 <DialogTitle>Upload New File</DialogTitle>
                 <DialogDescription>
-                  Add a file URL that users can download from your application
+                  Add a file URL to <span className="font-medium text-foreground">{appDetails?.name ?? "your application"}</span>
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
+                {appDetails && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-primary/10 border border-primary/20">
+                    <span className="text-xs font-medium text-primary">Application:</span>
+                    <span className="text-xs text-foreground font-semibold">{appDetails.name}</span>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>File URL</Label>
                   <Input
@@ -150,14 +156,14 @@ export default function FilesPage() {
                     placeholder="https://example.com/file.zip"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Direct download link to your file (e.g., from GitHub releases, Dropbox, etc.)
+                    Direct download link to your file (e.g., GitHub releases, Dropbox, CDN)
                   </p>
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between rounded-lg bg-secondary/50 border border-border p-3">
                   <div className="space-y-0.5">
                     <Label>Require Authentication</Label>
                     <p className="text-xs text-muted-foreground">
-                      Only authenticated users can download
+                      When enabled, users must be logged in via KeyAuth to download this file
                     </p>
                   </div>
                   <Switch checked={uploadAuthed} onCheckedChange={setUploadAuthed} />
