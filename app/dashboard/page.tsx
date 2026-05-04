@@ -419,7 +419,7 @@ export default function DashboardOverview() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            Stored locally in your browser only.
+            Persisted securely in your database and locally in your browser.
           </p>
         </CardContent>
       </Card>

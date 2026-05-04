@@ -15,6 +15,7 @@ import { Gift, Key, ArrowRight, AlertCircle, CheckCircle2, Loader2, RefreshCw } 
 import Link from "next/link"
 import { useKeyAuth } from "@/lib/keyauth-context"
 import { getSubscriptions, redeemLicense, type SubscriptionPlan } from "@/lib/keyauth-api"
+import { logRedemption } from "@/lib/actions"
 
 export default function RedeemKeyPage() {
   const { sellerKey, appDetails } = useKeyAuth()
@@ -77,6 +78,16 @@ export default function RedeemKeyPage() {
         appDetails.ownerid,
         licenseKey.trim()
       )
+
+      // Log the redemption attempt to Supabase
+      logRedemption({
+        appName: selectedApp,
+        licenseKey: licenseKey.trim(),
+        success: result.success,
+        message: result.message || "",
+      }).catch(() => {
+        // Non-critical — don't surface DB errors to the user
+      })
 
       if (result.success) {
         setStatus("success")

@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { getAppDetails, getStats, type AppDetails, type AppStats } from "./keyauth-api";
+import { getSellerKey, saveSellerKey } from "./actions";
 
 type UserRole = "owner" | "user" | null;
 
@@ -98,6 +99,11 @@ export function KeyAuthProvider({ children }: { children: React.ReactNode }) {
         totalfiles: statsData.totalfiles ?? "0",
       });
 
+      // Persist seller key to Supabase (service role bypasses RLS)
+      saveSellerKey(tempKey).catch((err) =>
+        console.error("[keyauth] failed to persist seller key:", err)
+      );
+
       if (typeof window !== "undefined") {
         localStorage.setItem("flake_seller_key", tempKey);
         localStorage.setItem("flake_role", "owner");
@@ -155,7 +161,7 @@ export function KeyAuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [sellerKey, isOwner]);
 
-  // Restore session on mount
+  // Restore session on mount — localStorage first, then fall back to Supabase DB
   useEffect(() => {
     if (typeof window === "undefined") return;
     const savedKey = localStorage.getItem("flake_seller_key");
@@ -166,6 +172,18 @@ export function KeyAuthProvider({ children }: { children: React.ReactNode }) {
       setRoleState("owner");
     } else if (savedRole === "user") {
       setRoleState("user");
+    } else {
+      // If no localStorage entry, try loading from DB (e.g. after clearing browser data)
+      getSellerKey().then((dbKey) => {
+        if (dbKey) {
+          setSellerKeyState(dbKey);
+          setRoleState("owner");
+          localStorage.setItem("flake_seller_key", dbKey);
+          localStorage.setItem("flake_role", "owner");
+        }
+      }).catch(() => {
+        // DB unavailable — silently continue
+      });
     }
   }, []);
 
