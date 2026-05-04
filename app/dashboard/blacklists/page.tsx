@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useKeyAuth } from "@/lib/keyauth-context"
-import { getBlacklists, addBlacklist, deleteBlacklist, type Blacklist } from "@/lib/keyauth-api"
+import { getBlacklists, createBlacklist, deleteBlacklist, type Blacklist } from "@/lib/keyauth-api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -78,7 +78,7 @@ export default function BlacklistsPage() {
   const handleCreateBlacklist = async () => {
     setCreateLoading(true)
     try {
-      const response = await addBlacklist(sellerKey, createData, createType)
+      const response = await createBlacklist(sellerKey, createData, createType)
       if (response.success) {
         setCreateOpen(false)
         setCreateData("")
